@@ -940,6 +940,87 @@ catch(err) → 500              →  rescue_from StandardError
 
 ---
 
+---
+
+## 🧠 Mental Model Summary — Node.js HTTP Server → Ruby on Rails
+
+### What we built
+A JSON API server with 3 routes, full error handling (404/405/500), and request data access — rebuilt in Rails by mapping every manually-written Node.js piece to its Rails equivalent.
+
+### The shape
+
+```
+YOUR Node.js (flat, manual)        RAILS (layered, automatic)
+────────────────────────────────   ──────────────────────────────────
+server.js                          config.ru
+  net.createServer()            →    Puma (TCP server)
+  socket.on('data', chunk)      →    Rack (middleware interface)
+  parseRequest(chunk)           →    ActionDispatch (request parsing)
+    method, path                →      request.method, request.path
+    queryParams                 →      request.query_parameters
+    headers                     →      request.headers
+    body                        →      params[:key]
+  router.resolve(method, path)  →    config/routes.rb
+    routes array                →      get "/", to: "pages#home"
+    handler fn                  →      PagesController#home
+    methodNotAllowed            →      explicit wrong-method routes → 405
+    else → 404                  →      catch-all route → not_found
+  buildResponse(status, body)   →    render json: body, status: :symbol
+  socket.write + socket.end     →    Puma (automatic)
+  catch(err) → 500              →    rescue_from StandardError
+```
+
+### Key decisions & why
+- `--api` flag → strips browser middleware — server was always API-only
+- `PagesController` groups `/` and `/about` → one controller per logical group, not per route (YAGNI + SRP)
+- `rescue_from` for 500, catch-all route for 404 → routing errors fire before controller exists — two different layers need two different tools
+- Wrong-method routes above catch-all → Rails matches top to bottom, first match wins
+- `ApplicationController` as base → shared error handling written once, inherited by all (DRY)
+
+### The patterns we used
+- **Convention over configuration** — file names, class names, route strings follow a fixed contract, Rails wires everything automatically
+- **Inheritance** — `PagesController < ApplicationController < ActionController::API` — each layer adds behaviour
+- **Macro registration** — `rescue_from` registers at class load time, fires at runtime
+
+### What would break without it
+- Remove `rescue_from StandardError` → crashes return HTML, not JSON — API clients break
+- Move catch-all to the top → every request hits `not_found`, real routes never reached
+- Remove wrong-method routes → `POST /about` returns 404 instead of 405
+- Single quotes for interpolation → `'#{name}'` prints literally
+
+---
+
+## ⏭️ Next Session — Start Here
+
+> **Read this at the start of the next session before asking anything.**
+
+Phase 1 (routing + controllers + error handling) is complete and tested. All routes work.
+
+**Phase 2 — ActiveRecord & the Model layer**
+
+The current `users#create` ignores the database entirely:
+```ruby
+def create
+  name  = params[:name]
+  email = params[:email]
+  render json: { message: "User #{name} created", email: email }, status: :created
+  # ↑ nothing is saved anywhere
+end
+```
+
+Next session picks up here — in this exact order using `/build-learn`:
+
+1. **What is ActiveRecord?** — Rails ORM, maps a Ruby class to a DB table
+2. **Generate a User model** — `rails generate model User name:string email:string`
+3. **Run the migration** — `rails db:migrate` — creates the `users` table
+4. **Save the user** — `User.create(name: params[:name], email: params[:email])`
+5. **Strong parameters** — `params.require(:user).permit(:name, :email)` — security layer
+6. **Query the DB** — `User.all`, `User.find(params[:id])`
+
+**Compare every step to Node.js** — Node.js had no ORM, no migrations, no model layer. Each Rails concept will be genuinely new but map to the raw SQL you'd otherwise write manually.
+
+---
+
 ## Environment
 
 | Tool | Version |
