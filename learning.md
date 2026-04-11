@@ -761,14 +761,182 @@ You can't go from scratch in Rails. But having built it from scratch in Node.js 
 
 ---
 
+---
+
+## Session 6 — 2026-04-11 — params, request object, 405 handling
+
+---
+
+### Q: How do you access request data inside a Rails controller?
+
+**A:**
+
+Two automatic objects available in every controller action — no passing, no importing:
+
+```ruby
+def create
+  params          # parsed body + query string + URL segments — all merged
+  request         # full request object — method, path, headers, raw body
+end
+```
+
+**Your Node.js equivalent:**
+```js
+// YOUR Node.js — manually passed to every handler
+handler({ method, path, queryParams, headers, body })
+```
+
+```ruby
+# RAILS — automatic, always present
+params[:name]                     # from body or query string
+request.method                    # GET, POST etc
+request.path                      # /create-user
+request.headers['Content-Type']   # any header
+request.query_parameters[:page]   # query string only
+request.request_parameters[:name] # body only
+```
+
+Full mapping of `parseRequest.js` output → Rails:
+
+```
+parseRequest.js output    RAILS equivalent
+──────────────────────    ──────────────────────────────
+method                 →  request.method
+path                   →  request.path
+queryParams            →  request.query_parameters
+headers                →  request.headers['Key']
+body                   →  params[:key]
+```
+
+---
+
+### Q: params merges body AND query string — how do I distinguish?
+
+**A:**
+
+By default you can't — Rails merges them. Body wins if same key appears in both.
+
+To be explicit:
+```ruby
+request.query_parameters[:name]   # URL query string only
+request.request_parameters[:name] # body only
+params[:name]                      # merged (body wins)
+```
+
+In practice: use different keys for URL params vs body — convention prevents collision.
+
+Dynamic URL segments (`:id`) also go into `params`:
+```ruby
+# PATCH /users/123  with body { "name": "John" }
+params[:id]    # → "123"  (URL segment)
+params[:name]  # → "John" (body)
+# different keys — no collision
+```
+
+---
+
+### Q: Ruby single quotes vs double quotes for string interpolation
+
+**A:**
+
+Gotcha for JS devs — Ruby only interpolates with **double quotes**:
+
+```ruby
+name = "John"
+
+'Hello #{name}'   # → "Hello #{name}"  ← literal, NOT interpolated
+"Hello #{name}"   # → "Hello John"     ← interpolated ✅
+```
+
+In JS both `'${name}'` and `"${name}"` fail the same way. In Ruby only `"#{}"` works.
+
+**Rule:** use double quotes whenever you need interpolation.
+
+---
+
+### Q: How to fix 405 Method Not Allowed in Rails?
+
+**A:**
+
+Rails returns 404 for wrong-method requests by default — it doesn't distinguish "path exists, wrong method" from "path doesn't exist."
+
+**Fix:** add explicit wrong-method routes between real routes and catch-all. Must be in order:
+
+```
+1. Real routes       — correct method → controller action
+2. Wrong-method      — known path, wrong method → 405
+3. Catch-all         — unknown path → 404
+```
+
+```ruby
+# routes.rb
+get  "/about",  to: "pages#about"    # ← real route (GET only)
+
+# wrong methods on /about → 405
+match "/about", to: "application#method_not_allowed",
+                via: [:post, :put, :patch, :delete]
+
+# nothing matched → 404
+match '*unmatched', to: 'application#not_found', via: :all
+```
+
+```ruby
+# application_controller.rb
+def method_not_allowed
+  render json: { error: 'Method Not Allowed' }, status: :method_not_allowed
+end
+```
+
+`via: [:post, :put, :patch, :delete]` — Ruby array of symbols. Lists every method that is NOT allowed for that path.
+
+**Your Node.js equivalent:**
+```js
+const pathExists = this.routes.some(r => r.path === path)
+return { handler: null, methodNotAllowed: pathExists }
+```
+
+---
+
+### Final test results — all routes working
+
+```
+GET  /                → 200  {"message":"Welcome to the home page"}
+GET  /about           → 200  {"message":"This is the about page"}
+POST /create-user     → 201  {"message":"User John created", "email":"..."}
+POST /about           → 405  {"error":"Method Not Allowed"}
+GET  /create-user     → 405  {"error":"Method Not Allowed"}
+GET  /unknown         → 404  {"error":"Not Found"}
+```
+
+---
+
+### Complete Node.js → Rails mapping
+
+```
+YOUR Node.js                     RAILS
+────────────────────────────     ──────────────────────────────
+net.createServer()            →  Puma
+parseRequest.js               →  ActionDispatch + request object
+buildResponse.js              →  render json:
+statusCodes.js                →  Rails symbols (:ok, :created...)
+router.js — route registry    →  config/routes.rb
+router.js — handler fn        →  controller actions
+router.js — resolve() 404     →  catch-all route + not_found
+router.js — resolve() 405     →  explicit wrong-method routes
+catch(err) → 500              →  rescue_from StandardError
+```
+
+---
+
 ## Pitfalls Encountered
 
 | # | Pitfall | Fix |
 |---|---------|-----|
 | 1 | rbenv shims not activating after install | Add `export PATH="$HOME/.rbenv/bin:$PATH"` before the `eval` line in `.zshrc` |
-| 2 | Rails returns 404 (not 405) for wrong HTTP method on a known route | Needs custom routing constraints — not handled by default |
+| 2 | Rails returns 404 (not 405) for wrong HTTP method on a known route | Add explicit wrong-method routes above the catch-all |
 | 3 | Rails 8.1 incompatible with Ruby 3.3 — SyntaxError on anonymous rest parameters | Upgrade to Ruby 3.4.2 via rbenv, reinstall gems |
 | 4 | `rescue_from` cannot catch `ActionController::RoutingError` — fires before controller loads | Use catch-all route `match '*unmatched'` + `not_found` action instead |
+| 5 | Single quotes don't interpolate in Ruby — `'Hello #{name}'` prints literally | Use double quotes `"Hello #{name}"` for interpolation |
 
 ---
 
