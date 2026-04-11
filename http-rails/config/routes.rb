@@ -17,6 +17,14 @@ Rails.application.routes.draw do
   post "/create-user", to: "users#create"
 
   # YOUR router.js equivalent:
+  # const pathExists = this.routes.some(r => r.path === path)
+  # return { handler: null, methodNotAllowed: pathExists }
+  # Path exists but wrong method → 405
+  match "/",            to: "application#method_not_allowed", via: [:post, :put, :patch, :delete]
+  match "/about",       to: "application#method_not_allowed", via: [:post, :put, :patch, :delete]
+  match "/create-user", to: "application#method_not_allowed", via: [:get, :put, :patch, :delete]
+
+  # YOUR router.js equivalent:
   # else branch in resolve() — nothing matched, return 404
   # Must be LAST — Rails matches top to bottom, first match wins
   match '*unmatched', to: 'application#not_found', via: :all
