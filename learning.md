@@ -586,6 +586,181 @@ All three routes tested and working via `rails server` + curl.
 
 ---
 
+---
+
+## Session 5 — 2026-04-11 — Error Handling, Status Codes, Macros
+
+---
+
+### Q: What is `rescue_from` — a function? a convention?
+
+**A:**
+
+Neither. It is a **Rails macro** — a method that configures behaviour at class definition time, not at request time.
+
+```
+class ApplicationController loads
+    ↓
+rescue_from StandardError do...end  ← runs immediately at class load
+    ↓
+Rails registers: "if StandardError is raised anywhere, run this block"
+    ↓
+Request comes in later → action crashes → handler fires
+```
+
+TS equivalent mental model:
+```ts
+// Same idea as decorators
+@CatchError(StandardError)
+class ApplicationController { }
+```
+
+Other Rails macros you will see: `before_action`, `after_action`, `skip_before_action`.
+
+---
+
+### Q: Thrown exceptions vs intentional renders — what's the difference?
+
+**A:**
+
+```
+THROWN EXCEPTIONS              INTENTIONAL RENDERS
+────────────────────────────   ────────────────────────────────
+Happen unexpectedly            You choose to send an error
+Rails/Ruby raises them         You call render json: yourself
+→ rescue_from catches them     → inside controller actions
+
+Examples:                      Examples:
+  unhandled crash → 500          user not found → 404
+  no route match → 404           wrong password → 401
+                                 validation fails → 422
+```
+
+Your Node.js had both too:
+```js
+// thrown — rescue_from equivalent
+catch (err) { buildResponse(500, ...) }
+
+// intentional — controller render equivalent
+if (!authenticated) { buildResponse(401, ...) }
+```
+
+---
+
+### Q: Status codes — do I need statusCodes.js in Rails?
+
+**A:**
+
+No. Rails replaces both jobs of `statusCodes.js` automatically.
+
+**Job 1 — number → text string (`STATUS_CODES`):** Rails owns this entirely via symbols:
+
+| Your number | Rails symbol |
+|---|---|
+| 200 | `:ok` |
+| 201 | `:created` |
+| 400 | `:bad_request` |
+| 401 | `:unauthorized` |
+| 403 | `:forbidden` |
+| 404 | `:not_found` |
+| 405 | `:method_not_allowed` |
+| 409 | `:conflict` |
+| 422 | `:unprocessable_entity` |
+| 500 | `:internal_server_error` |
+
+**Job 2 — error JSON body (`ERROR_RESPONSES`):** Rails triggers the error, you define the JSON shape — in `ApplicationController`, not in a separate file.
+
+---
+
+### Q: Why can't `rescue_from` catch 404 routing errors?
+
+**A:**
+
+Because `ActionController::RoutingError` fires in the **routing layer**, before any controller is instantiated. `rescue_from` only works inside the controller stack.
+
+```
+Request hits Rails
+    ↓
+Router tries to match path         ← RoutingError raised HERE
+    ↓                                 (before ApplicationController exists)
+Controller instantiated            ← rescue_from lives HERE
+    ↓
+Action runs
+```
+
+**Fix:** Use a catch-all route instead — same as your `else` branch in `router.js`:
+
+```ruby
+# routes.rb — must be LAST (first match wins, top to bottom)
+match '*unmatched', to: 'application#not_found', via: :all
+```
+
+```ruby
+# application_controller.rb
+def not_found
+  render json: { error: 'Not Found' }, status: :not_found
+end
+```
+
+Why last? Rails reads routes top to bottom, first match wins — same as your `routes.find()` returning the first match.
+
+---
+
+### Q: What does `via: :all` mean in the catch-all route?
+
+**A:**
+
+It means match **any HTTP method** — GET, POST, DELETE, PATCH, etc.
+
+```ruby
+match '*unmatched', to: 'application#not_found', via: :all
+#                                                 ↑
+#                                    any method hits this
+```
+
+Without `via: :all` you'd need separate catch-alls per method. Your Node.js `else` branch also implicitly caught any method.
+
+---
+
+### Files written — error handling complete
+
+`app/controllers/application_controller.rb`:
+```ruby
+class ApplicationController < ActionController::API
+  # thrown crash → 500
+  # YOUR: catch (err) { buildResponse(500, ERROR_RESPONSES[500]) }
+  rescue_from StandardError do
+    render json: { error: 'Internal Server Error' }, status: :internal_server_error
+  end
+
+  # catch-all route → 404
+  # YOUR: else { buildResponse(404, ERROR_RESPONSES[404]) }
+  def not_found
+    render json: { error: 'Not Found' }, status: :not_found
+  end
+end
+```
+
+`config/routes.rb` (catch-all added last):
+```ruby
+match '*unmatched', to: 'application#not_found', via: :all
+```
+
+---
+
+### Is this building an HTTP server "from scratch" in Rails?
+
+**No — and that's the point.**
+
+```
+Node.js project  → FROM SCRATCH (manual TCP, parsing, routing, response)
+Rails project    → USING A FRAMEWORK (Rails owns all those layers)
+```
+
+You can't go from scratch in Rails. But having built it from scratch in Node.js first means you know exactly what every Rails abstraction is replacing. That's more valuable than either alone.
+
+---
+
 ## Pitfalls Encountered
 
 | # | Pitfall | Fix |
@@ -593,6 +768,7 @@ All three routes tested and working via `rails server` + curl.
 | 1 | rbenv shims not activating after install | Add `export PATH="$HOME/.rbenv/bin:$PATH"` before the `eval` line in `.zshrc` |
 | 2 | Rails returns 404 (not 405) for wrong HTTP method on a known route | Needs custom routing constraints — not handled by default |
 | 3 | Rails 8.1 incompatible with Ruby 3.3 — SyntaxError on anonymous rest parameters | Upgrade to Ruby 3.4.2 via rbenv, reinstall gems |
+| 4 | `rescue_from` cannot catch `ActionController::RoutingError` — fires before controller loads | Use catch-all route `match '*unmatched'` + `not_found` action instead |
 
 ---
 
