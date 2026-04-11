@@ -15,4 +15,9 @@ Rails.application.routes.draw do
   get  "/",            to: "pages#home"
   get  "/about",       to: "pages#about"
   post "/create-user", to: "users#create"
+
+  # YOUR router.js equivalent:
+  # else branch in resolve() — nothing matched, return 404
+  # Must be LAST — Rails matches top to bottom, first match wins
+  match '*unmatched', to: 'application#not_found', via: :all
 end
