@@ -23,14 +23,39 @@ class Router {
     this.#addRoute('DELETE', path, handler);
   }
 
-  // Returns { handler, methodNotAllowed } for a given method + path.
-  // methodNotAllowed is true when the path exists but the method doesn't match.
-  resolve(method, path) {
-    const handler = this.routes.find(r => r.method === method && r.path === path);
-    if (handler) return { handler: handler.handler, methodNotAllowed: false };
+  // Tries to match a pattern like /users/:id against a path like /users/42.
+  // Returns { matched, params } — params is {} if no dynamic segments.
+  #matchRoute(pattern, path) {
+    const patternSegments = pattern.split('/');
+    const pathSegments = path.split('/');
 
-    const pathExists = this.routes.some(r => r.path === path);
-    return { handler: null, methodNotAllowed: pathExists };
+    if (patternSegments.length !== pathSegments.length) return { matched: false };
+
+    const params = {};
+    for (let i = 0; i < patternSegments.length; i++) {
+      if (patternSegments[i].startsWith(':')) {
+        const key = patternSegments[i].slice(1); // strip the leading ':'
+        params[key] = pathSegments[i];
+      } else if (patternSegments[i] !== pathSegments[i]) {
+        return { matched: false };
+      }
+    }
+
+    return { matched: true, params };
+  }
+
+  // Returns { handler, params, methodNotAllowed } for a given method + path.
+  // methodNotAllowed is true when the path matches but the method doesn't.
+  resolve(method, path) {
+    for (const route of this.routes) {
+      const { matched, params } = this.#matchRoute(route.path, path);
+      if (matched && route.method === method) {
+        return { handler: route.handler, params, methodNotAllowed: false };
+      }
+    }
+
+    const pathExists = this.routes.some(r => this.#matchRoute(r.path, path).matched);
+    return { handler: null, params: {}, methodNotAllowed: pathExists };
   }
 }
 
