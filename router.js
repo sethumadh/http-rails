@@ -1,39 +1,44 @@
 class Router {
   constructor() {
     this.routes = [];
+    this.middlewares = [];
   }
-
   #addRoute(method, path, handler) {
     this.routes.push({ method, path, handler });
   }
 
   get(path, handler) {
-    this.#addRoute('GET', path, handler);
+    this.#addRoute("GET", path, handler);
   }
 
   post(path, handler) {
-    this.#addRoute('POST', path, handler);
+    this.#addRoute("POST", path, handler);
   }
 
   put(path, handler) {
-    this.#addRoute('PUT', path, handler);
+    this.#addRoute("PUT", path, handler);
   }
 
   delete(path, handler) {
-    this.#addRoute('DELETE', path, handler);
+    this.#addRoute("DELETE", path, handler);
+  }
+
+  use(fn) {
+    this.middlewares.push(fn);
   }
 
   // Tries to match a pattern like /users/:id against a path like /users/42.
   // Returns { matched, params } — params is {} if no dynamic segments.
   #matchRoute(pattern, path) {
-    const patternSegments = pattern.split('/');
-    const pathSegments = path.split('/');
+    const patternSegments = pattern.split("/");
+    const pathSegments = path.split("/");
 
-    if (patternSegments.length !== pathSegments.length) return { matched: false };
+    if (patternSegments.length !== pathSegments.length)
+      return { matched: false };
 
     const params = {};
     for (let i = 0; i < patternSegments.length; i++) {
-      if (patternSegments[i].startsWith(':')) {
+      if (patternSegments[i].startsWith(":")) {
         const key = patternSegments[i].slice(1); // strip the leading ':'
         params[key] = pathSegments[i];
       } else if (patternSegments[i] !== pathSegments[i]) {
@@ -54,7 +59,9 @@ class Router {
       }
     }
 
-    const pathExists = this.routes.some(r => this.#matchRoute(r.path, path).matched);
+    const pathExists = this.routes.some(
+      (r) => this.#matchRoute(r.path, path).matched,
+    );
     return { handler: null, params: {}, methodNotAllowed: pathExists };
   }
 }

@@ -17,33 +17,33 @@
 - [x] Detect end of headers (`\r\n\r\n`) before parsing
 - [x] Use `Content-Length` header to know when the full body has arrived
 
-## 3. URL-encoded Body Parsing
+## 3. Middleware Layer
+- [ ] Design a `use(fn)` API on the router or server
+- [ ] Each middleware receives `(req, res, next)` and calls `next()` to continue
+- [ ] Support route-level and global middleware
+
+## 4. URL-encoded Body Parsing
 - [ ] Detect `application/x-www-form-urlencoded` content type in `parseRequest`
 - [ ] Parse `key=value&key2=value2` the same way query strings are parsed
 - [ ] Return parsed object as `body` (consistent with JSON body parsing)
 
-## 4. Static File Serving
+## 5. Static File Serving
 - [ ] Serve files from a designated directory (e.g. `./public`)
 - [ ] Set correct `Content-Type` based on file extension (`.html`, `.css`, `.js`, etc.)
 - [ ] Return 404 if file not found
 
-## 5. Nginx & VPS Deployment (EC2)
+## 6. Keep-Alive / Persistent Connections
+- [ ] Understand HTTP/1.1 keep-alive default behavior
+- [ ] Buffer reset and re-use across multiple requests on the same socket
+- [ ] Respect `Connection: close` header to end when needed
+
+## 7. Response Streaming
+- [ ] Stream large files directly to socket instead of loading into memory
+- [ ] Natural extension of static file serving
+
+## 8. Nginx & VPS Deployment (EC2)
 - [ ] Understand why Nginx sits in front of Node (reverse proxy mental model)
 - [ ] Nginx config — forward `/api/*` to Node on port 3000
 - [ ] Serve static files directly from Nginx (never hits Node)
 - [ ] SSL termination with Let's Encrypt
 - [ ] Keep Node running with pm2
-
-## 6. Middleware Layer
-- [ ] Design a `use(fn)` API on the router or server
-- [ ] Each middleware receives `(req, res, next)` and calls `next()` to continue
-- [ ] Support route-level and global middleware
-
-## 7. Keep-Alive / Persistent Connections
-- [ ] Understand HTTP/1.1 keep-alive default behavior
-- [ ] Buffer reset and re-use across multiple requests on the same socket
-- [ ] Respect `Connection: close` header to end when needed
-
-## 8. Response Streaming
-- [ ] Stream large files directly to socket instead of loading into memory
-- [ ] Natural extension of static file serving
