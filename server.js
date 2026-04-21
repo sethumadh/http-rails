@@ -90,13 +90,13 @@ const server = net.createServer((socket) => {
       } catch (err) {
       }
 
-      const { method, path, queryParams, httpVersion, headers, body } = req;
+      const { method, queryParams, httpVersion, headers, body } = req;
 
       console.log(`--> ${method} ${path} ${httpVersion}`);
 
       const { handler, params, methodNotAllowed } = router.resolve(
         method,
-        path,
+        req.path,
       );
 
       let response;
